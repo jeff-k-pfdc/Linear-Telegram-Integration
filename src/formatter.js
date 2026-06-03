@@ -14,9 +14,11 @@ function priorityLabel(p) {
 
 function issueLink(data) {
   const id = esc(data.identifier || data.id?.slice(0, 8));
-  const url = data.url;
   const title = esc(data.title || 'Untitled');
-  return url ? `<a href="${url}">${id}: ${title}</a>` : `<b>${id}: ${title}</b>`;
+  const webUrl = data.url;
+  // Use linear:// scheme to open in the app; falls back to browser if app not installed
+  const appUrl = webUrl ? webUrl.replace('https://', 'linear://') : null;
+  return appUrl ? `<a href="${appUrl}">${id}: ${title}</a>` : `<b>${id}: ${title}</b>`;
 }
 
 function teamLine() {
@@ -133,8 +135,8 @@ function formatComment(action, data, getMention = () => null, actor = null) {
 
 function formatProject(action, data, actor = null) {
   const name = esc(data.name || 'Untitled Project');
-  const url = data.url;
-  const link = url ? `<a href="${url}">${name}</a>` : `<b>${name}</b>`;
+  const appUrl = data.url ? data.url.replace('https://', 'linear://') : null;
+  const link = appUrl ? `<a href="${appUrl}">${name}</a>` : `<b>${name}</b>`;
 
   if (action === 'create') {
     return { key: 'project_created', msg: `<b>Project Created</b>\n${link}` };
