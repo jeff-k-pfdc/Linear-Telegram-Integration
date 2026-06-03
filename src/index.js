@@ -38,9 +38,11 @@ function verifySignature(rawBody, signature) {
   });
 }
 
-async function notify(chatId, text) {
+async function notify(chatId, text, url) {
   try {
-    await bot.telegram.sendMessage(chatId, text, { parse_mode: 'HTML', disable_web_page_preview: true });
+    const opts = { parse_mode: 'HTML', disable_web_page_preview: true };
+    if (url) opts.reply_markup = { inline_keyboard: [[{ text: 'Open in Linear', url }]] };
+    await bot.telegram.sendMessage(chatId, text, opts);
   } catch (err) {
     console.error(`Telegram send error (chat ${chatId}):`, err.message);
   }
@@ -57,6 +59,7 @@ async function dispatch(event, groupList, assigneeName) {
 
   const key = event.key ?? null;
   const msg = event.msg ?? event;
+  const url = event.url ?? null;
 
   if (key && !settings.isEnabled(key)) return;
 
@@ -69,7 +72,7 @@ async function dispatch(event, groupList, assigneeName) {
         if (!members.some(m => m.toLowerCase() === assigneeName.toLowerCase())) continue;
       }
     }
-    await notify(chatId, msg);
+    await notify(chatId, msg, url);
   }
 }
 
