@@ -23,34 +23,55 @@ function teamLine() {
   return '';
 }
 
-function format(type, action, data, updatedFrom) {
+// getMention(linearName) => "@username" or null — injected from users.js
+function format(type, action, data, updatedFrom, getMention = () => null, actor = null) {
   switch (type) {
     case 'Issue':
-      return formatIssue(action, data, updatedFrom);
+      return formatIssue(action, data, updatedFrom, getMention, actor);
     case 'Comment':
-      return formatComment(action, data);
+      return formatComment(action, data, getMention, actor);
     case 'Project':
-      return formatProject(action, data);
+      return formatProject(action, data, actor);
     case 'Cycle':
-      return formatCycle(action, data);
+      return formatCycle(action, data, actor);
     default:
       return null;
   }
 }
 
-function formatIssue(action, data, updatedFrom = {}) {
+function actorLine(actor, getMention) {
+  if (!actor?.name) return '';
+  const mention = getMention(actor.name);
+  return mention
+    ? `\nBy: ${esc(actor.name)} (${mention})`
+    : `\nBy: ${esc(actor.name)}`;
+}
+
+function ping(name, getMention) {
+  const mention = name ? getMention(name) : null;
+  return mention ? `${mention}\n` : '';
+}
+
+function assigneeLine(name, getMention) {
+  if (!name) return '';
+  return `\nAssignee: ${esc(name)}`;
+}
+
+function formatIssue(action, data, updatedFrom = {}, getMention = () => null, actor = null) {
   const link = issueLink(data);
-  const team = teamLine(data);
-  const assignee = data.assignee?.name ? `\nAssignee: ${esc(data.assignee.name)}` : '';
+  const by = actorLine(actor, getMention);
+  const assigneeName = data.assignee?.name;
+  const assignee = assigneeLine(assigneeName, getMention);
 
   if (action === 'create') {
     const priority = data.priority != null ? `\nPriority: ${priorityLabel(data.priority)}` : '';
     const state = data.state?.name ? `\nStatus: ${esc(data.state.name)}` : '';
-    return `<b>New Issue</b>\n${link}${team}${state}${priority}${assignee}`;
+    const p = ping(assigneeName, getMention);
+    return `${p}<b>New Issue</b>\n${link}${state}${priority}${assignee}${by}`;
   }
 
   if (action === 'remove') {
-    return `<b>Issue Deleted</b>\n${link}${team}`;
+    return `<b>Issue Deleted</b>\n${link}${by}`;
   }
 
   if (action === 'update') {
@@ -59,26 +80,32 @@ function formatIssue(action, data, updatedFrom = {}) {
     if (updatedFrom.stateId !== undefined) {
       const from = esc(updatedFrom.stateName || 'previous');
       const to = esc(data.state?.name || 'new status');
-      events.push({ key: 'issue_status_changed', msg: `<b>Status Changed</b>\n${link}\n${from} → ${to}${team}` });
+      const p = ping(assigneeName, getMention);
+      events.push({ key: 'issue_status_changed', msg: `${p}<b>Status Changed</b>\n${link}\n${from} → ${to}${by}` });
     }
 
     if (updatedFrom.assigneeId !== undefined) {
-      const to = data.assignee?.name ? esc(data.assignee.name) : 'Unassigned';
-      events.push({ key: 'issue_assigned', msg: `<b>Issue Assigned</b>\n${link}\nAssignee: ${to}${team}` });
+      const name = data.assignee?.name;
+      const p = ping(name, getMention);
+      const assigneeStr = name ? esc(name) : 'Unassigned';
+      events.push({ key: 'issue_assigned', msg: `${p}<b>Issue Assigned</b>\n${link}\nAssignee: ${assigneeStr}${by}` });
     }
 
     if (updatedFrom.priority !== undefined) {
       const from = priorityLabel(updatedFrom.priority);
       const to = priorityLabel(data.priority);
-      events.push({ key: 'issue_priority_changed', msg: `<b>Priority Changed</b>\n${link}\n${from} → ${to}${team}` });
+      const p = ping(assigneeName, getMention);
+      events.push({ key: 'issue_priority_changed', msg: `${p}<b>Priority Changed</b>\n${link}\n${from} → ${to}${by}` });
     }
 
     if (updatedFrom.title !== undefined) {
-      events.push({ key: 'issue_title_changed', msg: `<b>Title Changed</b>\n${esc(updatedFrom.title)} → ${esc(data.title)}${team}` });
+      const p = ping(assigneeName, getMention);
+      events.push({ key: 'issue_title_changed', msg: `${p}<b>Title Changed</b>\n${esc(updatedFrom.title)} → ${esc(data.title)}${by}` });
     }
 
     if (events.length === 0) {
-      events.push({ key: 'issue_updated', msg: `<b>Issue Updated</b>\n${link}${team}` });
+      const p = ping(assigneeName, getMention);
+      events.push({ key: 'issue_updated', msg: `${p}<b>Issue Updated</b>\n${link}${by}` });
     }
 
     return events;
@@ -87,27 +114,24 @@ function formatIssue(action, data, updatedFrom = {}) {
   return null;
 }
 
-function formatComment(action, data) {
-  const issueLink_ = data.issue
-    ? issueLink(data.issue)
-    : `<b>issue</b>`;
-
+function formatComment(action, data, getMention = () => null, actor = null) {
+  const issueLink_ = data.issue ? issueLink(data.issue) : `<b>issue</b>`;
   const body = esc((data.body || '').slice(0, 200)) + ((data.body || '').length > 200 ? '…' : '');
-  const author = data.user?.name ? esc(data.user.name) : 'Someone';
+  const by = actorLine(actor, getMention);
 
   if (action === 'create') {
-    return { key: 'comment_created', msg: `<b>${author} commented</b> on ${issueLink_}\n<i>${body}</i>` };
+    return { key: 'comment_created', msg: `<b>Comment Added</b> on ${issueLink_}${by}\n<i>${body}</i>` };
   }
   if (action === 'update') {
-    return { key: 'comment_updated', msg: `<b>Comment edited</b> on ${issueLink_}\n<i>${body}</i>` };
+    return { key: 'comment_updated', msg: `<b>Comment Edited</b> on ${issueLink_}${by}\n<i>${body}</i>` };
   }
   if (action === 'remove') {
-    return { key: 'comment_deleted', msg: `<b>Comment deleted</b> on ${issueLink_}` };
+    return { key: 'comment_deleted', msg: `<b>Comment Deleted</b> on ${issueLink_}${by}` };
   }
   return null;
 }
 
-function formatProject(action, data) {
+function formatProject(action, data, actor = null) {
   const name = esc(data.name || 'Untitled Project');
   const url = data.url;
   const link = url ? `<a href="${url}">${name}</a>` : `<b>${name}</b>`;
@@ -121,15 +145,14 @@ function formatProject(action, data) {
   return null;
 }
 
-function formatCycle(action, data) {
+function formatCycle(action, data, actor = null) {
   const name = esc(data.name || `Cycle ${data.number ?? ''}`);
-  const team = data.team?.name ? ` (${esc(data.team.name)})` : '';
 
   if (action === 'create') {
-    return { key: 'cycle_started', msg: `<b>Cycle Started</b>\n${name}${team}` };
+    return { key: 'cycle_started', msg: `<b>Cycle Started</b>\n${name}` };
   }
   if (action === 'update' && data.completedAt) {
-    return { key: 'cycle_completed', msg: `<b>Cycle Completed</b>\n${name}${team}` };
+    return { key: 'cycle_completed', msg: `<b>Cycle Completed</b>\n${name}` };
   }
   return null;
 }
