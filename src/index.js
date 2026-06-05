@@ -49,7 +49,7 @@ async function notify(chatId, text) {
   try {
     await bot.telegram.sendMessage(chatId, text, { parse_mode: 'HTML', disable_web_page_preview: true });
   } catch (err) {
-    console.error(`Telegram send error (chat ${chatId}):`, err.message);
+    console.error(`Telegram send error (chat ${chatId}):`, err.message, '| code:', err.code, '| description:', err.response?.description, '| status:', err.response?.error_code);
   }
 }
 
