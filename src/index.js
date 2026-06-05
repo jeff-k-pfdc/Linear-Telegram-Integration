@@ -82,7 +82,14 @@ async function dispatch(event, groupList, assigneeName) {
 
 app.use(express.raw({ type: 'application/json' }));
 
-app.post('/webhook/linear/:team', async (req, res) => {
+// Extract the team name from the Linear payload — works for issues, comments, and cycles
+function teamFromPayload(type, data) {
+  if (data?.team?.name) return data.team.name;
+  if (data?.issue?.team?.name) return data.issue.team.name;
+  return null;
+}
+
+async function handleLinear(req, res) {
   const sig = req.headers['linear-signature'];
   if (!verifySignature(req.body, sig)) {
     return res.status(401).json({ error: 'Invalid signature' });
@@ -98,8 +105,14 @@ app.post('/webhook/linear/:team', async (req, res) => {
   res.sendStatus(200); // acknowledge immediately
 
   const { type, action, data, updatedFrom, actor } = payload;
-  const teamName = req.params.team;
+  // Prefer the team name embedded in the payload; fall back to the URL segment
+  const teamName = teamFromPayload(type, data) || req.params.team || null;
   console.log(`[Linear] ${type} ${action} (team: ${teamName}, actor: ${actor?.name || 'unknown'})`);
+
+  if (!teamName) {
+    console.log('Could not determine team from payload or URL — skipping');
+    return;
+  }
 
   const groupList = groups.getGroupsForTeam(teamName);
   if (!groupList.length) {
@@ -110,7 +123,11 @@ app.post('/webhook/linear/:team', async (req, res) => {
   const assigneeName = data?.assignee?.name || null;
   const event = format(type, action, data, updatedFrom, getMention, actor, openUrl);
   await dispatch(event, groupList, assigneeName);
-});
+}
+
+// Supports both /webhook/linear (one URL for all teams) and /webhook/linear/:team (legacy)
+app.post('/webhook/linear/:team', handleLinear);
+app.post('/webhook/linear', handleLinear);
 
 // Deep link redirect — tries linear:// app first, falls back to https://
 app.get('/open', (req, res) => {
@@ -140,8 +157,8 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`Webhook base URL: POST http://localhost:${PORT}/webhook/linear/:team`);
-  console.log('Example: /webhook/linear/Developers');
+  console.log(`Webhook URL (single for all teams): POST http://localhost:${PORT}/webhook/linear`);
+  console.log(`Webhook URL (per-team, legacy):     POST http://localhost:${PORT}/webhook/linear/:team`);
 });
 
 bot.launch();
