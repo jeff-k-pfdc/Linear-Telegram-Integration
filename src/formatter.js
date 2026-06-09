@@ -119,7 +119,8 @@ function formatIssue(action, data, updatedFrom = {}, getMention = () => null, ac
 
 function formatComment(action, data, getMention = () => null, actor = null, getUrl = u => u) {
   const issueLink_ = data.issue ? issueLink(data.issue, getUrl) : `<b>issue</b>`;
-  const body = esc((data.body || '').slice(0, 200)) + ((data.body || '').length > 200 ? '…' : '');
+  const rawBody = (data.body || '').replace(/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/g, '[screenshot]').trim();
+  const body = esc(rawBody.slice(0, 200)) + (rawBody.length > 200 ? '…' : '');
   const by = actorStr(actor, getMention);
   const url = data.issue?.url;
   const assigneeName = data.issue?.assignee?.name;
