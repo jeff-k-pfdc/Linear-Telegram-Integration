@@ -27,8 +27,17 @@ function removeUser(linearName) {
   fs.writeFileSync(FILE, JSON.stringify(map, null, 2));
 }
 
+function editUser(oldName, newName, newHandle) {
+  const map = load();
+  if (!(oldName in map)) throw new Error(`User "${oldName}" not found. Check spelling with /users.`);
+  const existingHandle = map[oldName];
+  delete map[oldName];
+  map[newName] = newHandle !== undefined ? newHandle : existingHandle;
+  fs.writeFileSync(FILE, JSON.stringify(map, null, 2));
+}
+
 function listUsers() {
   return load();
 }
 
-module.exports = { getMention, addUser, removeUser, listUsers };
+module.exports = { getMention, addUser, removeUser, editUser, listUsers };

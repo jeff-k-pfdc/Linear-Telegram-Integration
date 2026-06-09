@@ -19,7 +19,8 @@ const HELP_TEXT =
   '/remove &lt;name&gt; — remove a member from this group\'s filter\n' +
   '/addstatus &lt;Status Name&gt; — pre-add a status to filter\n' +
   '/removestatus &lt;Status Name&gt; — remove a status from filter\n' +
-  '/adduser &lt;Name&gt; [@handle] — add a user globally (all groups)\n' +
+  '/adduser &lt;Name&gt; [@handle] — add a user globally\n' +
+  '/edituser &lt;Name&gt; &lt;New Name&gt; [@handle] — rename or update handle\n' +
   '/removeuser &lt;Name&gt; — remove a user globally\n' +
   '/users — list all users\n' +
   '/settings — open this group\'s settings\n' +
@@ -168,6 +169,54 @@ function createBot(token) {
     ctx.reply(`Removed: <b>${name}</b>`, { parse_mode: 'HTML' });
   });
 
+  bot.command('edituser', (ctx) => {
+    const parts = ctx.message.text.split(' ').slice(1);
+    const oldName = parts[0]?.trim();
+    if (!oldName) {
+      return ctx.reply(
+        'Usage:\n' +
+        '  /edituser <Name> <New Name> — rename\n' +
+        '  /edituser <Name> @new_handle — update Telegram handle\n' +
+        '  /edituser <Name> <New Name> @new_handle — rename and update handle\n\n' +
+        'Example: /edituser Jeff Jeffrey @jeffrey_pf'
+      );
+    }
+
+    // Detect if second arg is a handle change or a rename
+    const second = parts[1]?.trim();
+    const third = parts[2]?.trim();
+
+    let newName, newHandle;
+
+    if (!second) {
+      return ctx.reply('Provide a new name or @handle.\nExample: /edituser Jeff Jeffrey @jeffrey_pf');
+    } else if (second.startsWith('@')) {
+      // /edituser Jeff @new_handle — keep name, update handle
+      newName = oldName;
+      newHandle = second;
+    } else if (third?.startsWith('@')) {
+      // /edituser Jeff Jeffrey @jeffrey_pf — rename + new handle
+      newName = second;
+      newHandle = third;
+    } else {
+      // /edituser Jeff Jeffrey — rename only, keep existing handle
+      newName = second;
+      newHandle = undefined;
+    }
+
+    try {
+      users.editUser(oldName, newName, newHandle);
+      const map = users.listUsers();
+      const handle = map[newName];
+      ctx.reply(
+        `Updated:\n<b>${oldName}</b> → <b>${newName}</b>${handle ? ` (${handle})` : ''}`,
+        { parse_mode: 'HTML' }
+      );
+    } catch (err) {
+      ctx.reply(err.message);
+    }
+  });
+
   bot.command('users', (ctx) => {
     const map = users.listUsers();
     const entries = Object.entries(map);
@@ -280,6 +329,18 @@ function createBot(token) {
     }
   });
 
+  bot.action(/^deletestatus:(.+)$/, async (ctx) => {
+    const statusName = ctx.match[1];
+    const chatId = ctx.chat.id;
+    try {
+      groups.removeStatus(chatId, statusName);
+      await ctx.answerCbQuery(`Removed: ${statusName}`);
+      await ctx.editMessageReplyMarkup(buildStatusesKeyboard(chatId).reply_markup);
+    } catch (err) {
+      await ctx.answerCbQuery(err.message || 'Error removing status.');
+    }
+  });
+
   // Help section
   bot.action('settings:help', async (ctx) => {
     await ctx.answerCbQuery();
@@ -352,6 +413,7 @@ function buildStatusesKeyboard(chatId) {
 
   const buttons = entries.map(([name, on]) => [
     Markup.button.callback(`${on ? '✅' : '❌'} ${name}`, `togglestatus:${name}`),
+    Markup.button.callback('🗑️', `deletestatus:${name}`),
   ]);
 
   if (!buttons.length) {
