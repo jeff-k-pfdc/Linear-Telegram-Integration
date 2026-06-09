@@ -249,8 +249,16 @@ function createBot(token) {
 
   // ─── Settings menu ─────────────────────────────────────────────────────────
 
+  const SETTINGS_MAIN_TEXT =
+    '<b>⚙️ Settings</b>\n' +
+    '<i>All settings below are unique to this group chat — changing them here does not affect any other group.</i>\n\n' +
+    '• <b>Linked Teams</b> — choose which Linear team(s) send notifications here\n' +
+    '• <b>Notifications</b> — turn specific event types on or off (e.g. comments, status changes)\n' +
+    '• <b>Status Filters</b> — when a status change fires, pick exactly which statuses notify here\n' +
+    '• <b>Member Filter</b> — only notify when a specific person is involved (assignee, actor, or subscriber)';
+
   bot.command('settings', (ctx) => {
-    ctx.reply('<b>Settings</b>\nAll settings apply only to this group.', {
+    ctx.reply(SETTINGS_MAIN_TEXT, {
       parse_mode: 'HTML',
       ...mainMenuKeyboard(),
     });
@@ -258,7 +266,7 @@ function createBot(token) {
 
   bot.action('settings:main', async (ctx) => {
     await ctx.answerCbQuery();
-    await ctx.editMessageText('<b>Settings</b>\nAll settings apply only to this group.', {
+    await ctx.editMessageText(SETTINGS_MAIN_TEXT, {
       parse_mode: 'HTML',
       ...mainMenuKeyboard(),
     });
@@ -267,10 +275,23 @@ function createBot(token) {
   // Notifications section
   bot.action('settings:notifications', async (ctx) => {
     await ctx.answerCbQuery();
-    await ctx.editMessageText('<b>Notifications</b>\nTap to toggle for this group:', {
-      parse_mode: 'HTML',
-      ...buildNotificationsKeyboard(ctx.chat.id),
-    });
+    await ctx.editMessageText(
+      '<b>🔔 Notifications</b>\n' +
+      '<i>Tap any item to toggle it on (✅) or off (❌) for this group.</i>\n\n' +
+      '<b>Issue Created</b> — fires when a new issue is opened in the linked team\n' +
+      '<b>Issue Updated (other changes)</b> — fires when something not covered by a specific toggle changes (e.g. description, labels, due date)\n' +
+      '<b>Issue Deleted</b> — fires when an issue is permanently deleted\n' +
+      '<b>Status Changed (master toggle)</b> — fires when an issue moves between statuses. Turn this off to silence all status change notifications regardless of Status Filters\n' +
+      '<b>Issue Assigned</b> — fires when an issue is assigned or reassigned to someone\n' +
+      '<b>Priority Changed</b> — fires when an issue\'s priority level is updated\n' +
+      '<b>Title Changed</b> — fires when an issue\'s title is edited\n' +
+      '<b>Comment Added</b> — fires when anyone posts a new comment on an issue\n' +
+      '<b>Comment Edited</b> — fires when an existing comment is modified\n' +
+      '<b>Comment Deleted</b> — fires when a comment is removed\n' +
+      '<b>Project Created/Updated</b> — fires on project-level changes\n' +
+      '<b>Cycle Started/Completed</b> — fires when a sprint cycle begins or ends',
+      { parse_mode: 'HTML', ...buildNotificationsKeyboard(ctx.chat.id) }
+    );
   });
 
   bot.action(/^toggle:(.+)$/, async (ctx) => {
@@ -279,7 +300,7 @@ function createBot(token) {
     try {
       const newVal = groups.toggleSetting(chatId, key);
       const label = LABELS[key] || key;
-      await ctx.answerCbQuery(`${label}: ${newVal ? 'ON' : 'OFF'}`);
+      await ctx.answerCbQuery(`${label}: ${newVal ? 'ON ✅' : 'OFF ❌'}`);
       await ctx.editMessageReplyMarkup(buildNotificationsKeyboard(chatId).reply_markup);
     } catch {
       await ctx.answerCbQuery('Error toggling setting.');
@@ -289,10 +310,16 @@ function createBot(token) {
   // Linked teams section
   bot.action('settings:teams', async (ctx) => {
     await ctx.answerCbQuery();
-    await ctx.editMessageText('<b>Linked Teams</b>\nTap a team to unlink it. Use /register &lt;team&gt; to add.', {
-      parse_mode: 'HTML',
-      ...buildTeamsKeyboard(ctx.chat.id),
-    });
+    await ctx.editMessageText(
+      '<b>🏷 Linked Teams</b>\n' +
+      '<i>This group only receives notifications from the teams listed here.</i>\n\n' +
+      'Tap a team to <b>unlink</b> it and stop receiving its notifications.\n\n' +
+      'To add a new team:\n' +
+      '<code>/register &lt;team name&gt;</code>\n' +
+      'Example: <code>/register Developers</code>\n\n' +
+      'The team name must match exactly what appears in Linear (case-insensitive).',
+      { parse_mode: 'HTML', ...buildTeamsKeyboard(ctx.chat.id) }
+    );
   });
 
   bot.action(/^removeteam:(.+)$/, async (ctx) => {
@@ -305,10 +332,22 @@ function createBot(token) {
   // Member filter section
   bot.action('settings:members', async (ctx) => {
     await ctx.answerCbQuery();
-    await ctx.editMessageText('<b>Member Filter</b>\nTap to toggle. No one selected = notify for everyone:', {
-      parse_mode: 'HTML',
-      ...buildMembersKeyboard(ctx.chat.id),
-    });
+    const activeMembers = groups.getMembers(ctx.chat.id);
+    const filterStatus = activeMembers.length
+      ? `<b>Active filter:</b> ${activeMembers.join(', ')}`
+      : '<b>No filter set</b> — all events pass through regardless of who is involved';
+    await ctx.editMessageText(
+      '<b>👤 Member Filter</b>\n' +
+      '<i>Limit notifications to events where a specific person is involved.</i>\n\n' +
+      'A notification is sent when a filtered member is the <b>assignee</b>, the <b>person who made the change</b>, or a <b>subscriber</b> on the issue.\n\n' +
+      'Tap a name to toggle them on (✅) or off (❌).\n' +
+      'If nobody is selected, <b>all events are delivered</b>.\n\n' +
+      'To add someone who isn\'t listed:\n' +
+      '<code>/adduser &lt;Linear Name&gt; [@telegram]</code>\n' +
+      'Example: <code>/adduser Jeff Kim @jeff_pf</code>\n\n' +
+      filterStatus,
+      { parse_mode: 'HTML', ...buildMembersKeyboard(ctx.chat.id) }
+    );
   });
 
   bot.action(/^togglemember:(.+)$/, async (ctx) => {
@@ -319,10 +358,10 @@ function createBot(token) {
       const isOn = members.some(m => m.toLowerCase() === name.toLowerCase());
       if (isOn) {
         groups.removeMember(chatId, name);
-        await ctx.answerCbQuery(`${name}: removed`);
+        await ctx.answerCbQuery(`${name}: removed from filter`);
       } else {
         groups.addMember(chatId, name);
-        await ctx.answerCbQuery(`${name}: added`);
+        await ctx.answerCbQuery(`${name}: added to filter`);
       }
       await ctx.editMessageReplyMarkup(buildMembersKeyboard(chatId).reply_markup);
     } catch (err) {
@@ -333,8 +372,20 @@ function createBot(token) {
   // Status filters section
   bot.action('settings:statuses', async (ctx) => {
     await ctx.answerCbQuery();
+    const statuses = groups.getStatuses(ctx.chat.id);
+    const count = Object.keys(statuses).length;
+    const statusSummary = count
+      ? `<b>${count} status${count === 1 ? '' : 'es'} configured</b>`
+      : '<b>No statuses configured yet</b> — all status changes will notify until you add one';
     await ctx.editMessageText(
-      '<b>Status Filters</b>\nToggle which statuses trigger notifications.\nNew statuses auto-appear when first seen.\nUse /addstatus to pre-add.',
+      '<b>🔀 Status Filters</b>\n' +
+      '<i>Control which Linear statuses trigger a notification in this group.</i>\n\n' +
+      'This works <b>on top of</b> the "Status Changed" master toggle in Notifications — that must be ON for any status notifications to fire.\n\n' +
+      '✅ = this status will notify  |  ❌ = this status is silenced  |  🗑 = remove from list\n\n' +
+      'New statuses are <b>automatically added</b> (enabled) the first time an issue moves to that status. You can also pre-add them:\n' +
+      '<code>/addstatus &lt;Status Name&gt;</code>\n' +
+      'Example: <code>/addstatus In Progress</code>\n\n' +
+      statusSummary,
       { parse_mode: 'HTML', ...buildStatusesKeyboard(ctx.chat.id) }
     );
   });
@@ -344,7 +395,7 @@ function createBot(token) {
     const chatId = ctx.chat.id;
     try {
       const newVal = groups.toggleStatus(chatId, statusName);
-      await ctx.answerCbQuery(`${statusName}: ${newVal ? 'ON' : 'OFF'}`);
+      await ctx.answerCbQuery(`${statusName}: ${newVal ? 'ON ✅' : 'OFF ❌'}`);
       await ctx.editMessageReplyMarkup(buildStatusesKeyboard(chatId).reply_markup);
     } catch (err) {
       await ctx.answerCbQuery(err.message || 'Error toggling status.');
@@ -381,11 +432,11 @@ function createBot(token) {
 
 function mainMenuKeyboard() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('Linked Teams', 'settings:teams')],
-    [Markup.button.callback('Notifications', 'settings:notifications')],
-    [Markup.button.callback('Status Filters', 'settings:statuses')],
-    [Markup.button.callback('Member Filter', 'settings:members')],
-    [Markup.button.callback('Help', 'settings:help')],
+    [Markup.button.callback('🏷 Linked Teams — which Linear teams notify here', 'settings:teams')],
+    [Markup.button.callback('🔔 Notifications — event types on/off', 'settings:notifications')],
+    [Markup.button.callback('🔀 Status Filters — per-status notify control', 'settings:statuses')],
+    [Markup.button.callback('👤 Member Filter — filter by person', 'settings:members')],
+    [Markup.button.callback('❓ Help', 'settings:help')],
   ]);
 }
 
