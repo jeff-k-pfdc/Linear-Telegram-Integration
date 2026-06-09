@@ -27,11 +27,10 @@ function event(key, msg, url, extra) {
   return { key, msg, url: url || null, ...extra };
 }
 
-// "by Name" or "by Name (@mention)"
+// "by Name"
 function actorStr(actor, getMention) {
   if (!actor?.name) return '';
-  const mention = getMention(actor.name);
-  return mention ? `by ${esc(actor.name)} (${mention})` : `by ${esc(actor.name)}`;
+  return `by ${esc(actor.name)}`;
 }
 
 // Appends " · {by}" if by is non-empty
@@ -127,11 +126,11 @@ function formatComment(action, data, getMention = () => null, actor = null, getU
 
   if (action === 'create') {
     const p = pingFar(assigneeName, getMention);
-    return event('comment_created', `${p}<b>Comment Added</b>\n${issueLink_}${dot(by)}\n"${body}"`, url);
+    return event('comment_created', `${p}<b>Comment Added</b>\n${issueLink_}${dot(by)}\n\n"${body}"`, url);
   }
   if (action === 'update') {
     const p = pingClose(assigneeName, getMention);
-    return event('comment_updated', `${p}<b>Comment Edited</b>\n\n${issueLink_}${dot(by)}\n"${body}"`, url);
+    return event('comment_updated', `${p}<b>Comment Edited</b>\n\n${issueLink_}${dot(by)}\n\n"${body}"`, url);
   }
   if (action === 'remove') {
     const p = pingFar(assigneeName, getMention);
