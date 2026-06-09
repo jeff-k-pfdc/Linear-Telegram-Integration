@@ -15,4 +15,20 @@ function getMention(linearName) {
   return map[linearName] || null;
 }
 
-module.exports = { getMention };
+function addUser(linearName, telegramHandle) {
+  const map = load();
+  map[linearName] = telegramHandle || null;
+  fs.writeFileSync(FILE, JSON.stringify(map, null, 2));
+}
+
+function removeUser(linearName) {
+  const map = load();
+  delete map[linearName];
+  fs.writeFileSync(FILE, JSON.stringify(map, null, 2));
+}
+
+function listUsers() {
+  return load();
+}
+
+module.exports = { getMention, addUser, removeUser, listUsers };

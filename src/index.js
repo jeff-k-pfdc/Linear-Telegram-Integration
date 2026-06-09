@@ -54,11 +54,12 @@ async function notify(chatId, text) {
 }
 
 // groupList: array of { chatId, members[] } — members=[] means no filter (receive all)
-async function dispatch(event, groupList, assigneeName) {
+// relevantNames: all names involved in the event (assignee, actor, subscribers)
+async function dispatch(event, groupList, relevantNames) {
   if (!event || !groupList.length) return;
 
   if (Array.isArray(event)) {
-    for (const e of event) await dispatch(e, groupList, assigneeName);
+    for (const e of event) await dispatch(e, groupList, relevantNames);
     return;
   }
 
@@ -72,8 +73,9 @@ async function dispatch(event, groupList, assigneeName) {
     if (filtered) {
       const hasAll = members.some(m => m.toLowerCase() === 'all');
       if (!hasAll) {
-        if (!assigneeName) continue;
-        if (!members.some(m => m.toLowerCase() === assigneeName.toLowerCase())) continue;
+        const lowerMembers = members.map(m => m.toLowerCase());
+        const matched = relevantNames.some(name => name && lowerMembers.includes(name.toLowerCase()));
+        if (!matched) continue;
       }
     }
     await notify(chatId, msg);
@@ -121,8 +123,11 @@ async function handleLinear(req, res) {
   }
 
   const assigneeName = data?.assignee?.name || null;
-  const event = format(type, action, data, updatedFrom, getMention, actor, openUrl);
-  await dispatch(event, groupList, assigneeName);
+  const actorName = actor?.name || null;
+  const subscriberNames = (data?.subscribers || []).map(s => s.name).filter(Boolean);
+  const relevantNames = [...new Set([assigneeName, actorName, ...subscriberNames].filter(Boolean))];
+  const event = format(type, action, data, updatedFrom, getMention, actor, u => u);
+  await dispatch(event, groupList, relevantNames);
 }
 
 // Supports both /webhook/linear (one URL for all teams) and /webhook/linear/:team (legacy)

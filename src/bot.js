@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const settings = require('./settings');
 const groups = require('./groups');
+const users = require('./users');
 
 const HELP_TEXT =
   '<b>Linear Notification Bot</b>\n' +
@@ -17,6 +18,9 @@ const HELP_TEXT =
   '/unregister — stop notifications in this group\n' +
   '/add &lt;name&gt; — add a member to the filter\n' +
   '/remove &lt;name&gt; — remove a member from the filter\n' +
+  '/adduser &lt;Name&gt; [@handle] — add a new user globally (all groups)\n' +
+  '/removeuser &lt;Name&gt; — remove a user globally\n' +
+  '/users — list all users\n' +
   '/settings — open settings menu\n' +
   '/info — show team, members, and active notifications\n' +
   '/help — show this message\n\n' +
@@ -111,6 +115,30 @@ function createBot(token) {
     groups.removeMember(ctx.chat.id, name);
     const members = groups.getMembers(ctx.chat.id);
     ctx.reply(`Removed: ${name}\nCurrent: ${members.length ? members.join(', ') : 'none (all notifications enabled)'}`);
+  });
+
+  bot.command('adduser', (ctx) => {
+    const parts = ctx.message.text.split(' ').slice(1);
+    const name = parts[0]?.trim();
+    const handle = parts[1]?.trim() || null;
+    if (!name) return ctx.reply('Usage: /adduser <Linear Name> [@handle]\nExample: /adduser Alex @alex_pf');
+    users.addUser(name, handle);
+    ctx.reply(`Added: <b>${name}</b>${handle ? ` → ${handle}` : ' (no Telegram handle)'}\nThey can now be used in member filters across all groups.`, { parse_mode: 'HTML' });
+  });
+
+  bot.command('removeuser', (ctx) => {
+    const name = ctx.message.text.split(' ').slice(1).join(' ').trim();
+    if (!name) return ctx.reply('Usage: /removeuser <Linear Name>\nExample: /removeuser Alex');
+    users.removeUser(name);
+    ctx.reply(`Removed: <b>${name}</b>`, { parse_mode: 'HTML' });
+  });
+
+  bot.command('users', (ctx) => {
+    const map = users.listUsers();
+    const entries = Object.entries(map);
+    if (!entries.length) return ctx.reply('No users in the user map yet. Use /adduser to add one.');
+    const lines = entries.map(([name, handle]) => `  • <b>${name}</b>${handle ? ` → ${handle}` : ''}`).join('\n');
+    ctx.reply(`<b>Users (${entries.length})</b>\n${lines}`, { parse_mode: 'HTML' });
   });
 
   // /settings — main menu
