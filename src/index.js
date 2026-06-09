@@ -69,11 +69,17 @@ async function dispatch(event, groupList, relevantNames) {
 
   for (const { chatId, members } of groupList) {
     // Per-chat notification type toggle
-    if (key && !groups.isEnabled(chatId, key)) continue;
+    if (key && !groups.isEnabled(chatId, key)) {
+      console.log(`[dispatch] chat ${chatId}: blocked — event type "${key}" is disabled`);
+      continue;
+    }
 
     // Per-chat status filter (only applies when master toggle issue_status_changed is on)
     if (key === 'issue_status_changed' && event.statusName) {
-      if (!groups.isStatusEnabled(chatId, event.statusName)) continue;
+      if (!groups.isStatusEnabled(chatId, event.statusName)) {
+        console.log(`[dispatch] chat ${chatId}: blocked — status "${event.statusName}" is disabled`);
+        continue;
+      }
     }
 
     // Member filter
@@ -83,7 +89,10 @@ async function dispatch(event, groupList, relevantNames) {
       if (!hasAll) {
         const lowerMembers = members.map(m => m.toLowerCase());
         const matched = relevantNames.some(name => name && lowerMembers.includes(name.toLowerCase()));
-        if (!matched) continue;
+        if (!matched) {
+          console.log(`[dispatch] chat ${chatId}: blocked — none of [${relevantNames.join(', ')}] in member filter [${members.join(', ')}]`);
+          continue;
+        }
       }
     }
 

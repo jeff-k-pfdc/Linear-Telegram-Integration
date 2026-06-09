@@ -166,8 +166,10 @@ function toggleStatus(chatId, statusName) {
 // Unknown statuses default to enabled (until the user explicitly disables them)
 function isStatusEnabled(chatId, statusName) {
   const statuses = getStatuses(chatId);
-  if (!(statusName in statuses)) return true;
-  return statuses[statusName] === true;
+  const lower = statusName.toLowerCase();
+  const key = Object.keys(statuses).find(k => k.toLowerCase() === lower);
+  if (!key) return true; // unseen status — allow by default
+  return statuses[key] === true;
 }
 
 module.exports = {
