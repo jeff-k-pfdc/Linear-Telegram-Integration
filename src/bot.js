@@ -19,8 +19,9 @@ const HELP_TEXT =
   '/remove &lt;name&gt; — remove a member from this group\'s filter\n' +
   '/addstatus &lt;Status Name&gt; — pre-add a status to filter\n' +
   '/removestatus &lt;Status Name&gt; — remove a status from filter\n' +
-  '/adduser &lt;Name&gt; [@handle] — add a user globally\n' +
-  '/edituser &lt;Name&gt; &lt;New Name&gt; [@handle] — rename or update handle\n' +
+  '/adduser &lt;Name&gt; [@handle] — add a user (name can have spaces)\n' +
+  '/edituser &lt;Name&gt; @handle — update handle\n' +
+  '/edituser &lt;Old&gt; -&gt; &lt;New&gt; [@handle] — rename (use -&gt; as separator)\n' +
   '/removeuser &lt;Name&gt; — remove a user globally\n' +
   '/users — list all users\n' +
   '/settings — open this group\'s settings\n' +
@@ -154,10 +155,10 @@ function createBot(token) {
   // ─── Global user map ───────────────────────────────────────────────────────
 
   bot.command('adduser', (ctx) => {
-    const parts = ctx.message.text.split(' ').slice(1);
-    const name = parts[0]?.trim();
-    const handle = parts[1]?.trim() || null;
-    if (!name) return ctx.reply('Usage: /adduser <Linear Name> [@handle]\nExample: /adduser Alex @alex_pf');
+    const text = ctx.message.text.split(' ').slice(1).join(' ').trim();
+    if (!text) return ctx.reply('Usage: /adduser <Linear Name> [@handle]\nExample: /adduser Jeff Kim @jeff_pf');
+    const { name, handle } = splitNameAndHandle(text);
+    if (!name) return ctx.reply('Usage: /adduser <Linear Name> [@handle]\nExample: /adduser Jeff Kim @jeff_pf');
     users.addUser(name, handle);
     ctx.reply(`Added: <b>${name}</b>${handle ? ` → ${handle}` : ' (no Telegram handle)'}\nThey can now be used in member filters across all groups.`, { parse_mode: 'HTML' });
   });
@@ -170,46 +171,45 @@ function createBot(token) {
   });
 
   bot.command('edituser', (ctx) => {
-    const parts = ctx.message.text.split(' ').slice(1);
-    const oldName = parts[0]?.trim();
-    if (!oldName) {
-      return ctx.reply(
-        'Usage:\n' +
-        '  /edituser <Name> <New Name> — rename\n' +
-        '  /edituser <Name> @new_handle — update Telegram handle\n' +
-        '  /edituser <Name> <New Name> @new_handle — rename and update handle\n\n' +
-        'Example: /edituser Jeff Jeffrey @jeffrey_pf'
-      );
-    }
+    const text = ctx.message.text.split(' ').slice(1).join(' ').trim();
+    const USAGE =
+      'Usage:\n' +
+      '  /edituser <Name> @new_handle — update handle\n' +
+      '  /edituser <Old Name> -> <New Name> — rename\n' +
+      '  /edituser <Old Name> -> <New Name> @new_handle — rename + update handle\n\n' +
+      'Examples:\n' +
+      '  /edituser Jeff Kim @jeff_new\n' +
+      '  /edituser Jeff Kim -> Jeffrey Kim\n' +
+      '  /edituser Jeff Kim -> Jeffrey Kim @jeffrey_pf';
 
-    // Detect if second arg is a handle change or a rename
-    const second = parts[1]?.trim();
-    const third = parts[2]?.trim();
+    if (!text) return ctx.reply(USAGE);
 
-    let newName, newHandle;
+    let oldName, newName, newHandle;
 
-    if (!second) {
-      return ctx.reply('Provide a new name or @handle.\nExample: /edituser Jeff Jeffrey @jeffrey_pf');
-    } else if (second.startsWith('@')) {
-      // /edituser Jeff @new_handle — keep name, update handle
-      newName = oldName;
-      newHandle = second;
-    } else if (third?.startsWith('@')) {
-      // /edituser Jeff Jeffrey @jeffrey_pf — rename + new handle
-      newName = second;
-      newHandle = third;
+    if (text.includes(' -> ')) {
+      // Rename (with optional new handle)
+      const [oldPart, newPart] = text.split(' -> ');
+      oldName = oldPart.trim();
+      const { name, handle } = splitNameAndHandle(newPart.trim());
+      newName = name || oldName;
+      newHandle = handle; // undefined if not provided → keeps existing handle
     } else {
-      // /edituser Jeff Jeffrey — rename only, keep existing handle
-      newName = second;
-      newHandle = undefined;
+      // Handle-only update — everything before last @token is the name
+      const { name, handle } = splitNameAndHandle(text);
+      if (!handle) return ctx.reply('To update a handle use @, to rename use ->.\n\n' + USAGE);
+      oldName = name;
+      newName = name;
+      newHandle = handle;
     }
+
+    if (!oldName) return ctx.reply(USAGE);
 
     try {
       users.editUser(oldName, newName, newHandle);
       const map = users.listUsers();
-      const handle = map[newName];
+      const savedHandle = map[newName];
       ctx.reply(
-        `Updated:\n<b>${oldName}</b> → <b>${newName}</b>${handle ? ` (${handle})` : ''}`,
+        `Updated: <b>${oldName}</b> → <b>${newName}</b>${savedHandle ? ` (${savedHandle})` : ''}`,
         { parse_mode: 'HTML' }
       );
     } catch (err) {
@@ -422,6 +422,18 @@ function buildStatusesKeyboard(chatId) {
 
   buttons.push([Markup.button.callback('← Back', 'settings:main')]);
   return Markup.inlineKeyboard(buttons);
+}
+
+// Splits "Jeff Kim @jeff_pf" → { name: "Jeff Kim", handle: "@jeff_pf" }
+// If no @handle token at the end, handle is null
+function splitNameAndHandle(text) {
+  const tokens = text.trim().split(' ');
+  const last = tokens[tokens.length - 1];
+  if (last.startsWith('@')) {
+    const name = tokens.slice(0, -1).join(' ').trim();
+    return { name, handle: last };
+  }
+  return { name: text.trim(), handle: null };
 }
 
 module.exports = { createBot };
