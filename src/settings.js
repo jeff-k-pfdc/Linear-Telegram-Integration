@@ -1,8 +1,4 @@
-const fs = require('fs');
-const path = require('path');
-
-const SETTINGS_FILE = path.join(__dirname, '..', 'settings.json');
-
+// Default notification toggle values for a new chat
 const DEFAULTS = {
   issue_created: true,
   issue_updated: false,
@@ -22,9 +18,9 @@ const DEFAULTS = {
 
 const LABELS = {
   issue_created: 'Issue Created',
-  issue_updated: 'Issue Updated',
+  issue_updated: 'Issue Updated (other changes)',
   issue_deleted: 'Issue Deleted',
-  issue_status_changed: 'Status Changed',
+  issue_status_changed: 'Status Changed (master toggle)',
   issue_assigned: 'Issue Assigned',
   issue_priority_changed: 'Priority Changed',
   issue_title_changed: 'Title Changed',
@@ -37,33 +33,4 @@ const LABELS = {
   cycle_completed: 'Cycle Completed',
 };
 
-function load() {
-  if (!fs.existsSync(SETTINGS_FILE)) {
-    save(DEFAULTS);
-    return { ...DEFAULTS };
-  }
-  try {
-    const raw = fs.readFileSync(SETTINGS_FILE, 'utf8');
-    return { ...DEFAULTS, ...JSON.parse(raw) };
-  } catch {
-    return { ...DEFAULTS };
-  }
-}
-
-function save(settings) {
-  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
-}
-
-function toggle(key) {
-  const settings = load();
-  if (!(key in settings)) throw new Error(`Unknown setting: ${key}`);
-  settings[key] = !settings[key];
-  save(settings);
-  return settings[key];
-}
-
-function isEnabled(key) {
-  return load()[key] === true;
-}
-
-module.exports = { load, save, toggle, isEnabled, LABELS, DEFAULTS };
+module.exports = { DEFAULTS, LABELS };

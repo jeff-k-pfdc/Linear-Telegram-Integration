@@ -3,7 +3,6 @@ const express = require('express');
 const crypto = require('crypto');
 const { createBot } = require('./bot');
 const { format } = require('./formatter');
-const settings = require('./settings');
 const groups = require('./groups');
 const { getMention } = require('./users');
 
@@ -14,6 +13,8 @@ const {
   PUBLIC_URL,
   PORT = 3000,
 } = process.env;
+
+// settings.js is now constants-only; per-chat logic lives in groups.js
 
 const webhookSecrets = LINEAR_WEBHOOK_SECRETS
   ? LINEAR_WEBHOOK_SECRETS.split(',').map(s => s.trim()).filter(Boolean)
@@ -66,9 +67,16 @@ async function dispatch(event, groupList, relevantNames) {
   const key = event.key ?? null;
   const msg = event.msg ?? event;
 
-  if (key && !settings.isEnabled(key)) return;
-
   for (const { chatId, members } of groupList) {
+    // Per-chat notification type toggle
+    if (key && !groups.isEnabled(chatId, key)) continue;
+
+    // Per-chat status filter (only applies when master toggle issue_status_changed is on)
+    if (key === 'issue_status_changed' && event.statusName) {
+      if (!groups.isStatusEnabled(chatId, event.statusName)) continue;
+    }
+
+    // Member filter
     const filtered = members.length > 0;
     if (filtered) {
       const hasAll = members.some(m => m.toLowerCase() === 'all');
@@ -78,6 +86,7 @@ async function dispatch(event, groupList, relevantNames) {
         if (!matched) continue;
       }
     }
+
     await notify(chatId, msg);
   }
 }
@@ -126,6 +135,12 @@ async function handleLinear(req, res) {
   const actorName = actor?.name || null;
   const subscriberNames = (data?.subscribers || []).map(s => s.name).filter(Boolean);
   const relevantNames = [...new Set([assigneeName, actorName, ...subscriberNames].filter(Boolean))];
+
+  // Auto-register any new status name so it appears in /settings for each chat
+  if (type === 'Issue' && action === 'update' && data?.state?.name) {
+    for (const { chatId } of groupList) groups.ensureStatus(chatId, data.state.name);
+  }
+
   const event = format(type, action, data, updatedFrom, getMention, actor, u => u);
   await dispatch(event, groupList, relevantNames);
 }

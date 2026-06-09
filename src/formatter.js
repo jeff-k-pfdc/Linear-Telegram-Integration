@@ -23,8 +23,8 @@ function identifierLink(data, getUrl = u => u) {
   return url ? `<a href="${url}">${id}</a>` : `<b>${id}</b>`;
 }
 
-function event(key, msg, url) {
-  return { key, msg, url: url || null };
+function event(key, msg, url, extra) {
+  return { key, msg, url: url || null, ...extra };
 }
 
 // "by Name" or "by Name (@mention)"
@@ -84,7 +84,7 @@ function formatIssue(action, data, updatedFrom = {}, getMention = () => null, ac
       const from = esc(updatedFrom.stateName || 'previous');
       const to = esc(data.state?.name || 'new status');
       const p = pingFar(assigneeName, getMention);
-      events.push(event('issue_status_changed', `${p}<b>Status Changed</b>\n${link}\n\n${from} → ${to}${dot(by)}`, url));
+      events.push(event('issue_status_changed', `${p}<b>Status Changed</b>\n${link}\n\n${from} → ${to}${dot(by)}`, url, { statusName: data.state?.name || null }));
     }
 
     if (updatedFrom.assigneeId !== undefined) {
